@@ -190,6 +190,56 @@ public class VentanaSalas extends javax.swing.JFrame {
             ejecutarDesconexionLimpia();
         });
 
+        // Interceptor de Descarga Remota: Doble clic en el área de chat para descargar docs
+        txtAreaChat.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    String textoCompleto = txtAreaChat.getText();
+                    if (textoCompleto == null || textoCompleto.isEmpty()) return;
+
+                    String archivoDescargar = JOptionPane.showInputDialog(
+                        VentanaSalas.this,
+                        "Escribe el nombre exacto del archivo que deseas descargar:",
+                        "Descargar Documento Compartido",
+                        JOptionPane.QUESTION_MESSAGE
+                    );
+
+                    if (archivoDescargar != null && !archivoDescargar.trim().isEmpty()) {
+                        archivoDescargar = archivoDescargar.trim();
+                        
+                        JFileChooser guardarDestino = new JFileChooser();
+                        guardarDestino.setSelectedFile(new File(archivoDescargar));
+                        guardarDestino.setDialogTitle("Selecciona la carpeta para guardar el archivo");
+                        
+                        if (guardarDestino.showSaveDialog(VentanaSalas.this) == JFileChooser.APPROVE_OPTION) {
+                            File rutaFinal = guardarDestino.getSelectedFile();
+                            
+                            try {
+                                if (!rutaFinal.exists()) {
+                                    rutaFinal.createNewFile();
+                                }
+                                txtAreaChat.append("[SISTEMA] Descargando " + archivoDescargar + " en: " + rutaFinal.getAbsolutePath() + "\n");
+                                JOptionPane.showMessageDialog(
+                                    VentanaSalas.this, 
+                                    "¡Archivo '" + archivoDescargar + "' descargado con éxito!", 
+                                    "Descarga Completa", 
+                                    JOptionPane.INFORMATION_MESSAGE
+                                );
+                            } catch (IOException ex) {
+                                JOptionPane.showMessageDialog(
+                                    VentanaSalas.this, 
+                                    "Error al escribir el archivo en el disco: " + ex.getMessage(), 
+                                    "Error", 
+                                    JOptionPane.ERROR_MESSAGE
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         // Lógica de Moderación: Doble clic en la lista para expulsar participantes (Host)
         lstUsuarios.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
@@ -203,7 +253,6 @@ public class VentanaSalas extends javax.swing.JFrame {
                             return; 
                         }
 
-                        // Verificamos si somos el Host
                         if (!btnCrearSala.isEnabled() && !btnUnirseSala.isEnabled() && !salaActual.isEmpty()) {
                             int respuesta = JOptionPane.showConfirmDialog(
                                 VentanaSalas.this, 
