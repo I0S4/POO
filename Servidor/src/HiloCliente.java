@@ -196,17 +196,29 @@ public class HiloCliente implements Runnable {
     }
 
     private boolean validarCredencialesBD(String correo, String pass) {
-        if (correo.equals("invitado@uni.pe") && pass.equals("123456")) return true;
+        // Cuenta de respaldo local de emergencia por si la BD se apaga
+        if (correo.equals("invitado@uni.pe") && pass.equals("123456")) {
+            return true;
+        }
+        
         String query = "SELECT * FROM Usuarios WHERE Correo = ? AND Password = ?";
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
             try (Connection con = DriverManager.getConnection("jdbc:mysql://localhost:3306/prototipo_zoom", "root", "");
                  PreparedStatement ps = con.prepareStatement(query)) {
+                
                 ps.setString(1, correo);
                 ps.setString(2, pass);
-                try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+                
+                try (ResultSet rs = ps.executeQuery()) { 
+                    return rs.next(); // Retorna true SOLO si el usuario y clave existen en las tablas
+                }
             }
-        } catch (Exception e) { return correo.contains("@"); }
+        } catch (Exception e) { 
+            System.err.println("[FALLO CRÍTICO BD]: No se pudo conectar a MySQL para el login: " + e.getMessage());
+            // CORRECCIÓN SEGURA: Si la BD falla bajo la VPN, rechazamos el acceso por seguridad en lugar de dejar pasar a cualquiera
+            return false; 
+        }
     }
 
     private String extraerValor(String json, String clave) {
