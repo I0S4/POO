@@ -64,22 +64,31 @@ public class HiloCliente implements Runnable {
                     MainServidor.notificarCambioParticipantes(sala);
                 }
 
-                // --- SOLICITAR UNIRSE (VA A SALA DE ESPERA) ---
+                // --- SOLICITAR UNIRSE (SALA DE ESPERA CORREGIDA) ---
                 else if (linea.contains("\"type\":\"JOIN_ROOM_REQUEST\"")) {
                     String sala = extraerValor(linea, "sala");
                     this.salaAsignada = sala;
-                    
-                    // En lugar de meterlo directo, lo mandamos a la cola de espera
-                    salasEspera.computeIfAbsent(sala, k -> new ArrayList<>()).add(this);
-                    
-                    // Le avisamos al Host de esa sala que hay alguien tocando la puerta
-                    HiloCliente host = MainServidor.salasHosts.get(sala);
-                    if (host != null) {
-                        host.enviarMensajeDirecto("{\"type\":\"USER_WAITING\",\"usuario\":\"" + this.usuarioActual + "\"}");
-                    } else {
-                        salida.println("{\"type\":\"ROOM_NOT_FOUND\"}");
-                    }
+    
+                    // Forzamos a que el usuario actual guardado sea limpio (sin @uni.edu.pe)
+                    String correoCrudo = extraerValor(linea, "usuario");
+                if (correoCrudo.contains("@")) {
+                    this.usuarioActual = correoCrudo.split("@")[0];
+                } else {
+                    this.usuarioActual = correoCrudo;
                 }
+    
+    // Agregar a la sala de espera intermedio
+    HiloCliente.salasEspera.computeIfAbsent(sala, k -> new ArrayList<>()).add(this);
+    
+    // Le avisamos al Host usando el formato limpio estricto
+    HiloCliente host = MainServidor.salasHosts.get(sala);
+    if (host != null) {
+        System.out.println("[SERVER TX] Enviando sala de espera al Host para: " + this.usuarioActual);
+        host.enviarMensajeDirecto("{\"type\":\"USER_WAITING\",\"usuario\":\"" + this.usuarioActual + "\"}");
+    } else {
+        salida.println("{\"type\":\"ROOM_NOT_FOUND\"}");
+    }
+}
 
                 // --- RESPUESTA DEL HOST: ACEPTAR USUARIO ---
                 else if (linea.contains("\"type\":\"ACCEPT_USER\"")) {
