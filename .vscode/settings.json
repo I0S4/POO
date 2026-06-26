@@ -1,0 +1,12 @@
+{
+    "java.project.referencedLibraries": [
+        "lib/**/*.jar",
+        "Librerias/mysql-connector-j-9.7.0.jar",
+        "Librerias/bridj-0.7.0-android.jar",
+        "Librerias/slf4j-api-1.7.2-javadoc.jar",
+        "Librerias/webcam-capture-0.3.12-javadoc.jar",
+        "Librerias/bridj-0.7.0.jar",
+        "Librerias/slf4j-api-1.7.2.jar",
+        "Librerias/webcam-capture-0.3.12.jar"
+    ]
+}
