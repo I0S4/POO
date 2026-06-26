@@ -196,31 +196,44 @@ public class HiloCliente implements Runnable {
     }
 
     private boolean validarCredencialesBD(String correo, String pass) {
-        // Cuenta de respaldo local de emergencia por si la BD se apaga
+        // Cuenta de respaldo local de emergencia
         if (correo.equals("invitado@uni.pe") && pass.equals("123456")) {
             return true;
         }
         
-        String query = "SELECT * FROM Usuarios WHERE Correo = ? AND Password = ?";
+        Connection con = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        boolean usuarioValido = false;
+        
+        // CORRECCIÓN: Usamos exactamente el nombre de columna 'PasswordHash'
+        String query = "SELECT * FROM Usuarios WHERE Correo = ? AND PasswordHash = ?";
+        
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
-            try (Connection con = DriverManager.getConnection("jdbc:mysql://localhost:3306/prototipo_zoom", "root", "");
-                 PreparedStatement ps = con.prepareStatement(query)) {
-                
+            con = DriverManager.getConnection("jdbc:mysql://localhost:3306/prototipo_zoom", "root", "");
+            
+            if (con != null) {
+                ps = con.prepareStatement(query);
                 ps.setString(1, correo);
                 ps.setString(2, pass);
                 
-                try (ResultSet rs = ps.executeQuery()) { 
-                    return rs.next(); // Retorna true SOLO si el usuario y clave existen en las tablas
+                rs = ps.executeQuery();
+                
+                if (rs != null && rs.next()) {
+                    usuarioValido = true; // ¡Ahora sí encontrará la columna y validará correctamente!
                 }
             }
-        } catch (Exception e) { 
-            System.err.println("[FALLO CRÍTICO BD]: No se pudo conectar a MySQL para el login: " + e.getMessage());
-            // CORRECCIÓN SEGURA: Si la BD falla bajo la VPN, rechazamos el acceso por seguridad en lugar de dejar pasar a cualquiera
-            return false; 
+        } catch (Exception e) {
+            System.err.println("[FALLO CRÍTICO BD]: Error al consultar credenciales: " + e.getMessage());
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception e) {}
+            try { if (ps != null) ps.close(); } catch (Exception e) {}
+            try { if (con != null) con.close(); } catch (Exception e) {}
         }
+        
+        return usuarioValido;
     }
-
     private String extraerValor(String json, String clave) {
         try {
             String buscar = "\"" + clave + "\":\"";
