@@ -3,6 +3,9 @@ import java.net.Socket;
 import java.util.Base64;
 import java.awt.Dimension;
 import java.awt.Image;
+import java.awt.FlowLayout;
+import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -21,6 +24,7 @@ public class VentanaSalas extends javax.swing.JFrame {
     private JLabel lblMiCamara;
     private JLabel lblCamaraRemota;
     private JButton btnCamara;
+    private JButton btnSalirReunion; // Nuevo botón para CP-09
 
     private javax.swing.JButton btnCrearSala;
     private javax.swing.JButton btnUnirseSala;
@@ -37,224 +41,289 @@ public class VentanaSalas extends javax.swing.JFrame {
         this.entrada = entrada;
         this.miUsuario = usuario;
         
-        initComponentsManual();
-        conectarHiloLector();
+        initComponentsCustom();
+        iniciarHiloEscucha();
     }
 
-    private void initComponentsManual() {
-        setTitle("Sala de Reuniones UNI - Usuario: " + miUsuario);
-        setSize(950, 600);
+    private void initComponentsCustom() {
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        getContentPane().setBackground(new java.awt.Color(30, 30, 36));
-        setLayout(null);
+        setTitle("Sala de Videoconferencia - Usuario: " + miUsuario);
+        setSize(950, 600);
+        getContentPane().setBackground(new Color(30, 30, 36));
+        setLayout(new BorderLayout(10, 10));
 
+        // --- PANEL SUPERIOR: Gestión de Salas ---
+        JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        panelSuperior.setBackground(new Color(45, 45, 52));
+        
         JLabel lblSala = new JLabel("Código Sala:");
-        lblSala.setForeground(java.awt.Color.WHITE);
-        lblSala.setBounds(20, 20, 100, 25);
-        add(lblSala);
-
-        txtSalaInput = new javax.swing.JTextField();
-        txtSalaInput.setBounds(110, 20, 120, 25);
-        add(txtSalaInput);
-
-        btnCrearSala = new javax.swing.JButton("Crear (Host)");
-        btnCrearSala.setBounds(240, 20, 120, 25);
-        btnCrearSala.addActionListener(e -> {
-            salaActual = txtSalaInput.getText().trim();
-            if(!salaActual.isEmpty()){
-                salida.println("{\"type\":\"CREATE_ROOM\",\"sala\":\"" + salaActual + "\"}");
-                btnCrearSala.setEnabled(false);
-                btnUnirseSala.setEnabled(false);
-            }
-        });
-        add(btnCrearSala);
-
+        lblSala.setForeground(Color.WHITE);
+        txtSalaInput = new javax.swing.JTextField(10);
+        
+        btnCrearSala = new javax.swing.JButton("Crear Sala (Host)");
         btnUnirseSala = new javax.swing.JButton("Unirse");
-        btnUnirseSala.setBounds(370, 20, 100, 25);
-        btnUnirseSala.addActionListener(e -> {
-            salaActual = txtSalaInput.getText().trim();
-            if(!salaActual.isEmpty()){
-                salida.println("{\"type\":\"JOIN_ROOM_REQUEST\",\"sala\":\"" + salaActual + "\"}");
-                btnCrearSala.setEnabled(false);
-                btnUnirseSala.setEnabled(false);
-            }
-        });
-        add(btnUnirseSala);
+        
+        btnSalirReunion = new javax.swing.JButton("Salir de la Reunión");
+        btnSalirReunion.setBackground(new Color(211, 47, 47));
+        btnSalirReunion.setForeground(Color.WHITE);
+        btnSalirReunion.setEnabled(false); // Se activa al estar en una sala
 
-        // Chat Panel
-        txtAreaChat = new javax.swing.JTextArea();
-        txtAreaChat.setEditable(false);
-        JScrollPane scrollChat = new JScrollPane(txtAreaChat);
-        scrollChat.setBounds(20, 70, 450, 350);
-        add(scrollChat);
+        panelSuperior.add(lblSala);
+        panelSuperior.add(txtSalaInput);
+        panelSuperior.add(btnCrearSala);
+        panelSuperior.add(btnUnirseSala);
+        panelSuperior.add(btnSalirReunion);
+        add(panelSuperior, BorderLayout.NORTH);
 
-        txtMensajeInput = new javax.swing.JTextField();
-        txtMensajeInput.setBounds(20, 435, 340, 30);
-        add(txtMensajeInput);
+        // --- PANEL CENTRAL: Cámaras de Video ---
+        JPanel panelVideo = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 20));
+        panelVideo.setBackground(new Color(30, 30, 36));
 
-        btnEnviar = new javax.swing.JButton("Enviar");
-        btnEnviar.setBounds(370, 435, 100, 30);
-        btnEnviar.addActionListener(e -> enviarMensajeChat());
-        add(btnEnviar);
+        lblMiCamara = new JLabel("Mi Cámara (Apagada)");
+        lblMiCamara.setPreferredSize(new Dimension(320, 240));
+        lblMiCamara.setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
+        lblMiCamara.setHorizontalAlignment(SwingConstants.CENTER);
+        lblMiCamara.setForeground(Color.WHITE);
 
-        btnCompartirArchivo = new javax.swing.JButton("Subir Documento");
-        btnCompartirArchivo.setBounds(20, 480, 200, 30);
-        btnCompartirArchivo.addActionListener(e -> subirArchivoSeguro());
-        add(btnCompartirArchivo);
+        lblCamaraRemota = new JLabel("Cámara Remota (Esperando...)");
+        lblCamaraRemota.setPreferredSize(new Dimension(320, 240));
+        lblCamaraRemota.setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
+        lblCamaraRemota.setHorizontalAlignment(SwingConstants.CENTER);
+        lblCamaraRemota.setForeground(Color.WHITE);
 
-        // Participantes
+        panelVideo.add(lblMiCamara);
+        panelVideo.add(lblCamaraRemota);
+        add(panelVideo, BorderLayout.CENTER);
+
+        // --- PANEL ESTE: Lista de Participantes ---
+        JPanel panelUsuarios = new JPanel(new BorderLayout());
+        panelUsuarios.setBackground(new Color(45, 45, 52));
+        panelUsuarios.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Participantes", 0, 0, null, Color.WHITE));
+        
         lstUsuarios = new javax.swing.JList<>(modeloLista);
         JScrollPane scrollUsuarios = new JScrollPane(lstUsuarios);
-        scrollUsuarios.setBounds(490, 70, 180, 150);
-        add(scrollUsuarios);
+        scrollUsuarios.setPreferredSize(new Dimension(180, 0));
+        panelUsuarios.add(scrollUsuarios, BorderLayout.CENTER);
+        add(panelUsuarios, BorderLayout.EAST);
 
-        // Paneles de Video
-        lblMiCamara = new JLabel("Mi Cámara", SwingConstants.CENTER);
-        lblMiCamara.setBorder(BorderFactory.createLineBorder(java.awt.Color.GRAY));
-        lblMiCamara.setBounds(490, 240, 200, 150);
-        add(lblMiCamara);
+        // --- PANEL INFERIOR: Chat y Controles ---
+        JPanel panelInferior = new JPanel(new BorderLayout(5, 5));
+        panelInferior.setBackground(new Color(30, 30, 36));
 
-        lblCamaraRemota = new JLabel("Cámara Participante", SwingConstants.CENTER);
-        lblCamaraRemota.setBorder(BorderFactory.createLineBorder(java.awt.Color.GRAY));
-        lblCamaraRemota.setBounds(710, 240, 200, 150);
-        add(lblCamaraRemota);
+        txtAreaChat = new javax.swing.JTextArea(8, 50);
+        txtAreaChat.setEditable(false);
+        txtAreaChat.setBackground(new Color(23, 23, 28));
+        txtAreaChat.setForeground(Color.GREEN);
+        JScrollPane scrollChat = new JScrollPane(txtAreaChat);
+        panelInferior.add(scrollChat, BorderLayout.CENTER);
 
-        btnCamara = new javax.swing.JButton("Activar Cámara");
-        btnCamara.setBounds(490, 405, 160, 30);
-        btnCamara.addActionListener(e -> alternarCamara());
-        add(btnCamara);
-    }
+        JPanel panelControlesChat = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        panelControlesChat.setBackground(new Color(30, 30, 36));
+        
+        txtMensajeInput = new javax.swing.JTextField(30);
+        btnEnviar = new javax.swing.JButton("Enviar Chat");
+        btnCompartirArchivo = new javax.swing.JButton("Compartir Doc");
+        btnCamara = new javax.swing.JButton("Encender Cámara");
 
-    private void enviarMensajeChat() {
-        String texto = txtMensajeInput.getText().trim();
-        if (!texto.isEmpty() && !salaActual.isEmpty()) {
-            salida.println("{\"type\":\"CHAT_MESSAGE\",\"sala\":\"" + salaActual + "\",\"mensaje\":\"" + texto + "\"}");
-            txtMensajeInput.setText("");
-        }
-    }
+        panelControlesChat.add(txtMensajeInput);
+        panelControlesChat.add(btnEnviar);
+        panelControlesChat.add(btnCompartirArchivo);
+        panelControlesChat.add(btnCamara);
+        panelInferior.add(panelControlesChat, BorderLayout.SOUTH);
+        
+        add(panelInferior, BorderLayout.SOUTH);
 
-    // CP-07: Envío seguro por bloques en formato Base64 para no romper la lectura por líneas del Servidor
-    private void subirArchivoSeguro() {
-        if (salaActual.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Primero debes crear o unirte a una sala.");
-            return;
-        }
-        JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File f = chooser.getSelectedFile();
-            new Thread(() -> {
-                try (FileInputStream fis = new FileInputStream(f)) {
-                    // Mensaje de control inicial
-                    salida.println("{\"type\":\"START_FILE_UPLOAD\",\"sala\":\"" + salaActual + "\",\"archivo\":\"" + f.getName() + "\"}");
-                    
-                    byte[] buffer = new byte[3000]; // Fragmentos controlados para evitar desbordamientos de buffer
-                    int bytesLeidos;
-                    while ((bytesLeidos = fis.read(buffer)) != -1) {
-                        byte[] datosReales = bytesLeidos == 3000 ? buffer : java.util.Arrays.copyOf(buffer, bytesLeidos);
-                        String chunkBase64 = Base64.getEncoder().encodeToString(datosReales);
-                        salida.println("{\"type\":\"FILE_CHUNK\",\"sala\":\"" + salaActual + "\",\"archivo\":\"" + f.getName() + "\",\"data\":\"" + chunkBase64 + "\"}");
-                    }
-                    salida.println("{\"type\":\"FILE_END\",\"sala\":\"" + salaActual + "\",\"archivo\":\"" + f.getName() + "\"}");
-                    
-                    SwingUtilities.invokeLater(() -> txtAreaChat.append("[SISTEMA] Envío completado de: " + f.getName() + "\n"));
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }).start();
-        }
-    }
-
-    private void alternarCamara() {
-        if (!camaraActiva) {
-            try {
-                webcam = Webcam.getDefault();
-                if (webcam != null) {
-                    webcam.setViewSize(new Dimension(176, 144)); // Tamaño adecuado para transferencia de sockets
-                    webcam.open();
-                    camaraActiva = true;
-                    btnCamara.setText("Apagar Cámara");
-                    iniciarStreamingCamara();
-                } else {
-                    JOptionPane.showMessageDialog(this, "No se detectó hardware de cámara.");
-                }
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(this, "Dispositivo ocupado por otro proceso.");
+        // --- MANEJADORES DE EVENTOS (LISTENERS) ---
+        btnCrearSala.addActionListener(e -> {
+            String sala = txtSalaInput.getText().trim();
+            if(!sala.isEmpty()) {
+                salaActual = sala;
+                salida.println("{\"type\":\"CREATE_ROOM\",\"sala\":\"" + sala + "\",\"usuario\":\"" + miUsuario + "\"}");
+                btnCrearSala.setEnabled(false);
+                btnUnirseSala.setEnabled(false);
+                btnSalirReunion.setEnabled(true);
+                txtAreaChat.append("[SISTEMA] Has creado la sala: " + sala + " como Anfitrión.\n");
             }
-        } else {
-            camaraActiva = false;
-            if (webcam != null) webcam.close();
-            btnCamara.setText("Activar Cámara");
-            lblMiCamara.setIcon(null);
-            lblMiCamara.setText("Cámara Apagada");
-        }
+        });
+
+        btnUnirseSala.addActionListener(e -> {
+            String sala = txtSalaInput.getText().trim();
+            if(!sala.isEmpty()) {
+                salaActual = sala;
+                salida.println("{\"type\":\"JOIN_ROOM_REQUEST\",\"sala\":\"" + sala + "\",\"usuario\":\"" + miUsuario + "\"}");
+                btnCrearSala.setEnabled(false);
+                btnUnirseSala.setEnabled(false);
+                btnSalirReunion.setEnabled(true);
+                txtAreaChat.append("[SISTEMA] Solicitando ingreso a la sala: " + sala + "...\n");
+            }
+        });
+
+        btnEnviar.addActionListener(e -> {
+            String msg = txtMensajeInput.getText().trim();
+            if (!msg.isEmpty() && !salaActual.isEmpty()) {
+                salida.println("{\"type\":\"CHAT_MESSAGE\",\"sala\":\"" + salaActual + "\",\"mensaje\":\"" + msg + "\"}");
+                txtMensajeInput.setText("");
+            }
+        });
+
+        btnCamara.addActionListener(e -> {
+            if (salaActual.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Primero debes unirte o crear una sala.");
+                return;
+            }
+            if (!camaraActiva) {
+                encenderCamaraLocal();
+            } else {
+                apagarCamaraLocal();
+            }
+        });
+
+        btnCompartirArchivo.addActionListener(e -> {
+            if (salaActual.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Primero debes unirte o crear una sala.");
+                return;
+            }
+            subirMetadatosArchivo();
+        });
+
+        // LÓGICA DEL NUEVO BOTÓN: Enviar salida limpia (CP-09)
+        btnSalirReunion.addActionListener(e -> {
+            ejecutarDesconexionLimpia();
+        });
     }
 
-    private void iniciarStreamingCamara() {
-        new Thread(() -> {
-            while (camaraActiva && !socket.isClosed()) {
-                try {
-                    BufferedImage frame = webcam.getImage();
-                    if (frame != null) {
-                        // Actualizar UI Local
-                        SwingUtilities.invokeLater(() -> {
-                            lblMiCamara.setIcon(new ImageIcon(frame.getScaledInstance(lblMiCamara.getWidth(), lblMiCamara.getHeight(), Image.SCALE_FAST)));
-                        });
+    private void encenderCamaraLocal() {
+        try {
+            webcam = Webcam.getDefault();
+            if (webcam != null) {
+                webcam.setViewSize(new Dimension(320, 240));
+                webcam.open();
+                camaraActiva = true;
+                btnCamara.setText("Apagar Cámara");
+                
+                // Hilo de transmisión periódica de frames
+                new Thread(() -> {
+                    while (camaraActiva) {
+                        try {
+                            BufferedImage frame = webcam.getImage();
+                            if (frame != null) {
+                                // Dibujar localmente
+                                Image escalada = frame.getScaledInstance(lblMiCamara.getWidth(), lblMiCamara.getHeight(), Image.SCALE_SMOOTH);
+                                SwingUtilities.invokeLater(() -> lblMiCamara.setIcon(new ImageIcon(escalada)));
 
-                        // Convertir a JPEG comprimido en memoria
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        ImageIO.write(frame, "jpg", baos);
-                        String frame64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                                // Convertir a Base64 para transportarlo por la red
+                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                ImageIO.write(frame, "jpg", baos);
+                                byte[] bytes = baos.toByteArray();
+                                String base64 = Base64.getEncoder().encodeToString(bytes);
 
-                        // Enviar trama al Servidor
-                        if (!salaActual.isEmpty()) {
-                            salida.println("{\"type\":\"CAMERA_FRAME\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + miUsuario + "\",\"frame\":\"" + frame64 + "\"}");
+                                String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+                                salida.println("{\"type\":\"CAMERA_FRAME\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\",\"frame\":\"" + base64 + "\"}");
+                            }
+                            Thread.sleep(150); // Ajuste de frames por segundo para balancear la VPN
+                        } catch (Exception ex) {
+                            break;
                         }
                     }
-                    Thread.sleep(150); // Control de FPS óptimo para evitar saturación de red
-                } catch (Exception e) {
-                    break;
-                }
+                }).start();
+            } else {
+                JOptionPane.showMessageDialog(this, "No se detectó ninguna cámara de video en el sistema.");
             }
-        }).start();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error de inicialización de cámara: " + ex.getMessage());
+        }
     }
 
-    private void conectarHiloLector() {
+    private void apagarCamaraLocal() {
+        camaraActiva = false;
+        if (webcam != null && webcam.isOpen()) {
+            webcam.close();
+        }
+        lblMiCamara.setIcon(null);
+        lblMiCamara.setText("Mi Cámara (Apagada)");
+        btnCamara.setText("Encender Cámara");
+    }
+
+    private void subirMetadatosArchivo() {
+        JFileChooser selector = new JFileChooser();
+        if (selector.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File archivo = selector.getSelectedFile();
+            long tamano = archivo.length();
+            String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+            
+            salida.println("{\"type\":\"START_FILE_UPLOAD\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\",\"archivo\":\"" + archivo.getName() + "\",\"tamano\":" + tamano + "}");
+        }
+    }
+
+    private void ejecutarDesconexionLimpia() {
+    apagarCamaraLocal();
+    String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+    
+    // 1. Notificar formalmente al servidor (CP-09)
+    if (salida != null && !salaActual.isEmpty()) {
+        salida.println("{\"type\":\"LEAVE_ROOM\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\"}");
+    }
+    
+    // 2. USO DE LA VARIABLE: Cerrar la conexión física del socket de forma segura
+    try {
+        if (socket != null && !socket.isClosed()) {
+            socket.close(); 
+        }
+    } catch (IOException ex) {
+        System.err.println("[CLIENTE] Error al cerrar el socket físico: " + ex.getMessage());
+    }
+    
+    // 3. Resetear la UI local y limpiar paneles
+    salaActual = "";
+    modeloLista.clear();
+    btnCrearSala.setEnabled(true);
+    btnUnirseSala.setEnabled(true);
+    btnSalirReunion.setEnabled(false);
+    lblCamaraRemota.setIcon(null);
+    lblCamaraRemota.setText("Cámara Remota (Esperando...)");
+    txtAreaChat.append("[SISTEMA] Has salido de la reunión y se ha liberado el socket de red.\n");
+}
+
+    private void iniciarHiloEscucha() {
         new Thread(() -> {
             try {
-                String linea;
-                while ((linea = entrada.readLine()) != null) {
-                    final String trama = linea;
-                    
-                    // CP-06: Mensajes de Chat entrantes
+                String trama;
+                while ((trama = entrada.readLine()) != null) {
                     if (trama.contains("\"type\":\"CHAT_MESSAGE\"")) {
                         String user = extraerValor(trama, "usuario");
                         String msg = extraerValor(trama, "mensaje");
-                        SwingUtilities.invokeLater(() -> txtAreaChat.append(user + ": " + msg + "\n"));
+                        SwingUtilities.invokeLater(() -> txtAreaChat.append("[" + user + "]: " + msg + "\n"));
                     }
                     
-                    // CP-08: Fotogramas de cámaras de otros integrantes
                     else if (trama.contains("\"type\":\"CAMERA_FRAME\"")) {
-                        String frame64 = extraerValor(trama, "frame");
-                        byte[] imageBytes = Base64.getDecoder().decode(frame64);
-                        BufferedImage img = ImageIO.read(new ByteArrayInputStream(imageBytes));
-                        if (img != null) {
-                            SwingUtilities.invokeLater(() -> {
-                                lblCamaraRemota.setIcon(new ImageIcon(img.getScaledInstance(lblCamaraRemota.getWidth(), lblCamaraRemota.getHeight(), Image.SCALE_FAST)));
-                            });
+                        String emisor = extraerValor(trama, "usuario");
+                        String miNombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+                        
+                        if (!emisor.equals(miNombreCorto)) {
+                            String base64Image = extraerValor(trama, "frame");
+                            try {
+                                byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+                                ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes);
+                                BufferedImage imgRemota = ImageIO.read(bais);
+                                if (imgRemota != null) {
+                                    Image escalada = imgRemota.getScaledInstance(lblCamaraRemota.getWidth(), lblCamaraRemota.getHeight(), Image.SCALE_SMOOTH);
+                                    SwingUtilities.invokeLater(() -> lblCamaraRemota.setIcon(new ImageIcon(escalada)));
+                                }
+                            } catch (Exception ex) {
+                                // Control de ruido binario
+                            }
                         }
                     }
                     
-                    // CP-07: Notificación de archivo disponible para descargar
                     else if (trama.contains("\"type\":\"FILE_NOTIFY\"")) {
-                        String arch = extraerValor(trama, "archivo");
-                        String autor = extraerValor(trama, "usuario");
-                        SwingUtilities.invokeLater(() -> txtAreaChat.append("[DOCUMENTO] " + autor + " compartió: " + arch + " (Almacenado en servidor)\n"));
+                        String emisor = extraerValor(trama, "usuario");
+                        String archivo = extraerValor(trama, "archivo");
+                        SwingUtilities.invokeLater(() -> txtAreaChat.append("[SISTEMA] El usuario (" + emisor + ") compartió el documento: " + archivo + "\n"));
                     }
                     
-                    // Actualización de lista de participantes en pantalla (CP-09)
-                    else if (trama.contains("\"type\":\"UPDATE_PARTICIPANTS\"")) {
-                        String listaString = extraerValor(trama, "lista");
-                        String[] arr = listaString.split(",");
+                    else if (trama.contains("\"type\":\"USERS_LIST\"")) {
+                        String listaCruda = extraerValor(trama, "usuarios");
+                        String[] arr = listaCruda.split(",");
                         SwingUtilities.invokeLater(() -> {
                             modeloLista.clear();
                             for (String u : arr) {
@@ -263,19 +332,22 @@ public class VentanaSalas extends javax.swing.JFrame {
                         });
                     }
                     
-                    // CP-10: Cierre forzado de la sesión por el Host
                     else if (trama.contains("\"type\":\"ROOM_CLOSED\"")) {
                         SwingUtilities.invokeLater(() -> {
-                            JOptionPane.showMessageDialog(this, "La sala de reuniones ha sido cerrada por el Anfitrión.");
-                            camaraActiva = false;
-                            if (webcam != null) webcam.close();
-                            this.dispose();
+                            JOptionPane.showMessageDialog(this, "La sala ha sido finalizada por el Anfitrión.");
+                            apagarCamaraLocal();
+                            modeloLista.clear();
+                            salaActual = "";
+                            btnCrearSala.setEnabled(true);
+                            btnUnirseSala.setEnabled(true);
+                            btnSalirReunion.setEnabled(false);
+                            lblCamaraRemota.setIcon(null);
+                            lblCamaraRemota.setText("Cámara Remota (Esperando...)");
                         });
-                        break;
                     }
                 }
             } catch (IOException e) {
-                SwingUtilities.invokeLater(() -> txtAreaChat.append("[SISTEMA] Desconectado del servidor de reuniones.\n"));
+                SwingUtilities.invokeLater(() -> txtAreaChat.append("[SISTEMA] Error de conexión con el Servidor.\n"));
             }
         }).start();
     }
@@ -283,6 +355,13 @@ public class VentanaSalas extends javax.swing.JFrame {
     private String extraerValor(String json, String clave) {
         try {
             String buscar = "\"" + clave + "\":\"";
+            if (!json.contains(buscar)) {
+                String buscarNum = "\"" + clave + "\":";
+                int inicio = json.indexOf(buscarNum) + buscarNum.length();
+                int fin = json.indexOf(",", inicio);
+                if (fin == -1) fin = json.indexOf("}", inicio);
+                return json.substring(inicio, fin).trim();
+            }
             int inicio = json.indexOf(buscar) + buscar.length();
             return json.substring(inicio, json.indexOf("\"", inicio));
         } catch (Exception e) {
