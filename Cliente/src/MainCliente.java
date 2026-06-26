@@ -87,24 +87,33 @@ public class MainCliente extends javax.swing.JFrame {
             int puertoFinal = 8090;
             
             if (hostInput.contains(":")) {
-                String limpia = hostInput.replace("tcp://", "");
+                String limpia = hostInput.replace("tcp://", "").replace("https://", "");
                 String[] partes = limpia.split(":");
                 hostFinal = partes[0];
                 puertoFinal = Integer.parseInt(partes[1]);
             }
 
             Socket socket = new Socket(hostFinal, puertoFinal);
+            
+            // Protección contra lag, latencia o cambio a datos móviles
+            socket.setSoTimeout(10000); 
+            socket.setTcpNoDelay(true);
+
             PrintWriter salida = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
             BufferedReader entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
 
             String correo = txtCorreo.getText().trim();
-            String pass = new String(txtPassword.getPassword());
+            String pass = new String(txtPassword.getPassword()).trim();
 
             salida.println("{\"type\":\"LOGIN\",\"correo\":\"" + correo + "\",\"password\":\"" + pass + "\"}");
             String jsonResponse = entrada.readLine();
             
             if (jsonResponse != null && jsonResponse.contains("\"status\":\"SUCCESS\"")) {
                 JOptionPane.showMessageDialog(this, "¡Login Correcto! Bienvenido.");
+                
+                // Quitamos el timeout estricto para que la transmisión de video no se corte por inactividad de texto
+                socket.setSoTimeout(0); 
+                
                 new VentanaSalas(socket, salida, entrada, correo).setVisible(true);
                 this.dispose(); 
             } else {
@@ -112,7 +121,7 @@ public class MainCliente extends javax.swing.JFrame {
                 socket.close();
             }
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Error: No se pudo conectar.");
+            JOptionPane.showMessageDialog(this, "Error: No se pudo conectar al servidor.");
         } 
     }                                        
 
