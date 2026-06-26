@@ -24,7 +24,7 @@ public class VentanaSalas extends javax.swing.JFrame {
     private JLabel lblMiCamara;
     private JLabel lblCamaraRemota;
     private JButton btnCamara;
-    private JButton btnSalirReunion; // Nuevo botón para CP-09
+    private JButton btnSalirReunion; 
 
     private javax.swing.JButton btnCrearSala;
     private javax.swing.JButton btnUnirseSala;
@@ -66,7 +66,7 @@ public class VentanaSalas extends javax.swing.JFrame {
         btnSalirReunion = new javax.swing.JButton("Salir de la Reunión");
         btnSalirReunion.setBackground(new Color(211, 47, 47));
         btnSalirReunion.setForeground(Color.WHITE);
-        btnSalirReunion.setEnabled(false); // Se activa al estar en una sala
+        btnSalirReunion.setEnabled(false); 
 
         panelSuperior.add(lblSala);
         panelSuperior.add(txtSalaInput);
@@ -133,7 +133,7 @@ public class VentanaSalas extends javax.swing.JFrame {
         
         add(panelInferior, BorderLayout.SOUTH);
 
-        // --- MANEJADORES DE EVENTOS (LISTENERS) ---
+        // --- EVENT LISTENERS ---
         btnCrearSala.addActionListener(e -> {
             String sala = txtSalaInput.getText().trim();
             if(!sala.isEmpty()) {
@@ -186,9 +186,40 @@ public class VentanaSalas extends javax.swing.JFrame {
             subirMetadatosArchivo();
         });
 
-        // LÓGICA DEL NUEVO BOTÓN: Enviar salida limpia (CP-09)
         btnSalirReunion.addActionListener(e -> {
             ejecutarDesconexionLimpia();
+        });
+
+        // Lógica de Moderación: Doble clic en la lista para expulsar participantes (Host)
+        lstUsuarios.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    String usuarioSeleccionado = lstUsuarios.getSelectedValue();
+                    if (usuarioSeleccionado != null) {
+                        String miNombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+                        
+                        if (usuarioSeleccionado.equals(miNombreCorto)) {
+                            return; 
+                        }
+
+                        // Verificamos si somos el Host
+                        if (!btnCrearSala.isEnabled() && !btnUnirseSala.isEnabled() && !salaActual.isEmpty()) {
+                            int respuesta = JOptionPane.showConfirmDialog(
+                                VentanaSalas.this, 
+                                "¿Deseas expulsar de la reunión al participante " + usuarioSeleccionado + "?",
+                                "Moderación de Sala (Host)", 
+                                JOptionPane.YES_NO_OPTION,
+                                JOptionPane.WARNING_MESSAGE
+                            );
+
+                            if (respuesta == JOptionPane.YES_OPTION) {
+                                salida.println("{\"type\":\"KICK_USER\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + usuarioSeleccionado + "\"}");
+                            }
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -201,17 +232,14 @@ public class VentanaSalas extends javax.swing.JFrame {
                 camaraActiva = true;
                 btnCamara.setText("Apagar Cámara");
                 
-                // Hilo de transmisión periódica de frames
                 new Thread(() -> {
                     while (camaraActiva) {
                         try {
                             BufferedImage frame = webcam.getImage();
                             if (frame != null) {
-                                // Dibujar localmente
                                 Image escalada = frame.getScaledInstance(lblMiCamara.getWidth(), lblMiCamara.getHeight(), Image.SCALE_SMOOTH);
                                 SwingUtilities.invokeLater(() -> lblMiCamara.setIcon(new ImageIcon(escalada)));
 
-                                // Convertir a Base64 para transportarlo por la red
                                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                                 ImageIO.write(frame, "jpg", baos);
                                 byte[] bytes = baos.toByteArray();
@@ -220,7 +248,7 @@ public class VentanaSalas extends javax.swing.JFrame {
                                 String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
                                 salida.println("{\"type\":\"CAMERA_FRAME\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\",\"frame\":\"" + base64 + "\"}");
                             }
-                            Thread.sleep(150); // Ajuste de frames por segundo para balancear la VPN
+                            Thread.sleep(150); 
                         } catch (Exception ex) {
                             break;
                         }
@@ -256,33 +284,30 @@ public class VentanaSalas extends javax.swing.JFrame {
     }
 
     private void ejecutarDesconexionLimpia() {
-    apagarCamaraLocal();
-    String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
-    
-    // 1. Notificar formalmente al servidor (CP-09)
-    if (salida != null && !salaActual.isEmpty()) {
-        salida.println("{\"type\":\"LEAVE_ROOM\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\"}");
-    }
-    
-    // 2. USO DE LA VARIABLE: Cerrar la conexión física del socket de forma segura
-    try {
-        if (socket != null && !socket.isClosed()) {
-            socket.close(); 
+        apagarCamaraLocal();
+        String nombreCorto = miUsuario.contains("@") ? miUsuario.split("@")[0] : miUsuario;
+        
+        if (salida != null && !salaActual.isEmpty()) {
+            salida.println("{\"type\":\"LEAVE_ROOM\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + nombreCorto + "\"}");
         }
-    } catch (IOException ex) {
-        System.err.println("[CLIENTE] Error al cerrar el socket físico: " + ex.getMessage());
+        
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close(); 
+            }
+        } catch (IOException ex) {
+            System.err.println("[CLIENTE] Error al cerrar socket físico: " + ex.getMessage());
+        }
+        
+        salaActual = "";
+        modeloLista.clear();
+        btnCrearSala.setEnabled(true);
+        btnUnirseSala.setEnabled(true);
+        btnSalirReunion.setEnabled(false);
+        lblCamaraRemota.setIcon(null);
+        lblCamaraRemota.setText("Cámara Remota (Esperando...)");
+        txtAreaChat.append("[SISTEMA] Has salido de la reunión y se ha liberado el socket de red.\n");
     }
-    
-    // 3. Resetear la UI local y limpiar paneles
-    salaActual = "";
-    modeloLista.clear();
-    btnCrearSala.setEnabled(true);
-    btnUnirseSala.setEnabled(true);
-    btnSalirReunion.setEnabled(false);
-    lblCamaraRemota.setIcon(null);
-    lblCamaraRemota.setText("Cámara Remota (Esperando...)");
-    txtAreaChat.append("[SISTEMA] Has salido de la reunión y se ha liberado el socket de red.\n");
-}
 
     private void iniciarHiloEscucha() {
         new Thread(() -> {
@@ -310,7 +335,7 @@ public class VentanaSalas extends javax.swing.JFrame {
                                     SwingUtilities.invokeLater(() -> lblCamaraRemota.setIcon(new ImageIcon(escalada)));
                                 }
                             } catch (Exception ex) {
-                                // Control de ruido binario
+                                // Control de ruido binario menor
                             }
                         }
                     }
@@ -329,6 +354,40 @@ public class VentanaSalas extends javax.swing.JFrame {
                             for (String u : arr) {
                                 if(!u.isEmpty()) modeloLista.addElement(u);
                             }
+                        });
+                    }
+
+                    else if (trama.contains("\"type\":\"USER_WAITING\"")) {
+                        String usuarioEspera = extraerValor(trama, "usuario");
+                        int opcion = JOptionPane.showConfirmDialog(
+                            this, 
+                            "El participante '" + usuarioEspera + "' solicita ingresar a la reunión. ¿Permitir acceso?",
+                            "Sala de Espera Activa", 
+                            JOptionPane.YES_NO_OPTION
+                        );
+                        
+                        if (opcion == JOptionPane.YES_OPTION) {
+                            salida.println("{\"type\":\"ACCEPT_USER\",\"sala\":\"" + salaActual + "\",\"usuario\":\"" + usuarioEspera + "\"}");
+                        }
+                    }
+
+                    else if (trama.contains("\"type\":\"JOIN_ROOM_APPROVED\"")) {
+                        SwingUtilities.invokeLater(() -> {
+                            txtAreaChat.append("[SISTEMA] ¡Tu ingreso ha sido aprobado por el Anfitrión!\n");
+                        });
+                    }
+
+                    else if (trama.contains("\"type\":\"KICKED_BY_HOST\"")) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(this, "Has sido retirado de la sala por el anfitrión de la reunión.", "Expulsado", JOptionPane.ERROR_MESSAGE);
+                            apagarCamaraLocal();
+                            salaActual = "";
+                            modeloLista.clear();
+                            btnCrearSala.setEnabled(true);
+                            btnUnirseSala.setEnabled(true);
+                            btnSalirReunion.setEnabled(false);
+                            lblCamaraRemota.setIcon(null);
+                            lblCamaraRemota.setText("Cámara Remota (Esperando...)");
                         });
                     }
                     
