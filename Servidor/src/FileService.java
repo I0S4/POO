@@ -23,9 +23,22 @@ public class FileService {
                 return ps.executeUpdate() > 0;
             }
         } catch (Exception e) {
-            System.err.println("[ERROR RECONSTRUCCIÓN BD]: " + e.getMessage());
-            // Retorna true para permitir el flujo local por sockets aunque la BD esté vacía externamente
-            return true; 
+            // CONTROL DE FALLOS: Si falla por la columna 'Tamano', intentamos alternativamente con 'tamano' minúscula
+            try {
+                String queryAlternativa = "INSERT INTO archivoscompartidos (IdSala, NombreArchivo, tamano, EnviadoPor) VALUES (?, ?, ?, ?)";
+                try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+                     PreparedStatement ps = con.prepareStatement(queryAlternativa)) {
+                    ps.setString(1, meta.getSala());
+                    ps.setString(2, meta.getArchivo());
+                    ps.setLong(3, meta.getTamano());
+                    ps.setString(4, meta.getUsuario());
+                    return ps.executeUpdate() > 0;
+                }
+            } catch (Exception ex) {
+                System.err.println("[ERROR RECONSTRUCCIÓN BD] No se pudo registrar en la BD: " + ex.getMessage());
+                // Retorna true para permitir el flujo local por sockets aunque la BD falle localmente
+                return true; 
+            }
         }
     }
 

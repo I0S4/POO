@@ -127,7 +127,12 @@ public class HiloCliente implements Runnable {
                         HiloCliente victima = null;
                         synchronized (listaClientes) {
                             for (HiloCliente hc : listaClientes) {
-                                if (hc.getUsuarioActual().equals(usuarioBotado)) {
+                                String correoCompleto = hc.getUsuarioActual();
+                                // Extraemos el nombre corto (antes del @) si es un correo electrónico
+                                String nombreCorto = correoCompleto.contains("@") ? correoCompleto.split("@")[0] : correoCompleto;
+                                
+                                // CORRECCIÓN: Comparamos contra el nombre corto recibido del JList o el correo completo
+                                if (nombreCorto.equals(usuarioBotado) || correoCompleto.equals(usuarioBotado)) {
                                     victima = hc;
                                     break;
                                 }
